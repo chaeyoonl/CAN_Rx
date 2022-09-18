@@ -9,7 +9,7 @@ uint8_t TxData[8];
 uint32_t TxMailbox;
 
 CAN_RxHeaderTypeDef RxHeader;
-uint8_t RxData[8];
+uint8_t RxData[8] = {0,};
 
 uint8_t CanWatchTimer100ms, CanWatchTimer1s;
 uint8_t CanSleepTimer100ms;
@@ -26,6 +26,18 @@ void CAN_SetFilterId(CAN_FilterTypeDef* sFilterConfig, uint8_t ide, uint32_t id,
     sFilterConfig->FilterIdLow = ((id & 0x1FFF) << 3) | CAN_ID_EXT;
     sFilterConfig->FilterMaskIdHigh = (mask & 0x1FFFE000) >> 13;
     sFilterConfig->FilterMaskIdLow = ((mask & 0x1FFF) << 3) | CAN_ID_EXT;
+
+//	    sFilterConfig->FilterIdHigh = 0x201 << 5;	// 필터링 ID 지정 -> 송신 측에서는 0x201로 보내는 데이터만 수신
+//	    sFilterConfig->FilterIdLow = 0x0000;
+//	    sFilterConfig->FilterMaskIdHigh = 0x0000;
+//	    sFilterConfig->FilterMaskIdLow = 0x0000;
+
+
+//	    sFilterConfig->FilterIdHigh = 0x0000;
+//	    sFilterConfig->FilterIdLow = 0x0000;
+//	    sFilterConfig->FilterMaskIdHigh = 0x0000;
+//	    sFilterConfig->FilterMaskIdLow = 0x0000;
+
   }
   else // StdId Range 0 ~ 7FF
   {
@@ -33,6 +45,7 @@ void CAN_SetFilterId(CAN_FilterTypeDef* sFilterConfig, uint8_t ide, uint32_t id,
     sFilterConfig->FilterIdLow = 0x0000;
     sFilterConfig->FilterMaskIdHigh = (mask & 0x7FF) << 5;
     sFilterConfig->FilterMaskIdLow = 0x0000;
+
   }
 }
 
@@ -40,15 +53,17 @@ void CAN1_SetFilter(void)
 {
   CAN_FilterTypeDef sFilterConfig;
 
+  sFilterConfig.FilterBank = 0;
+  sFilterConfig.FilterMode = CAN_FILTERMODE_IDMASK; // MASK Mode
   sFilterConfig.FilterScale = CAN_FILTERSCALE_32BIT;
 
 
-  sFilterConfig.FilterMode = CAN_FILTERMODE_IDLIST; // ID List Mode
-  CAN_SetFilterId(&sFilterConfig, CAN_ID_EXT, CAN_ID1, CAN_ID2);
 
-  sFilterConfig.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+  CAN_SetFilterId(&sFilterConfig, CAN_ID_EXT, 0x10FF0000, 0x1BFFFE88);
+
+//  sFilterConfig.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+  sFilterConfig.FilterFIFOAssignment = CAN_RX_FIFO0;
   sFilterConfig.FilterActivation = ENABLE;
-  sFilterConfig.FilterBank = 0;
   sFilterConfig.SlaveStartFilterBank = 14; // meaningless at single CAN
 
   if(HAL_CAN_ConfigFilter(&hcan1, &sFilterConfig) != HAL_OK)
@@ -60,8 +75,8 @@ void CAN1_SetFilter(void)
 
 void CAN1_Start(void)
 {
-  HAL_CAN_Start(&hcan1);
-  HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
+	HAL_StatusTypeDef status1 = HAL_CAN_Start(&hcan1);
+	HAL_StatusTypeDef status2 = HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING);
 }
 
 void CAN1_Stop(void)
@@ -71,42 +86,48 @@ void CAN1_Stop(void)
 }
 
 
-void CAN1_Rx(void)
+uint8_t* CAN1_Rx(void)
 {
+
+//	printf("==== can rx function ===\n");
   HAL_StatusTypeDef status1 = HAL_CAN_GetRxMessage(&hcan1, CAN_RX_FIFO0, &RxHeader, RxData);
 
+//  printf("rx status -> %d\n", status1);
 
   if(HAL_OK != status1)
   {
-    D_PRINTF("[CAN1] RX Get Error! - %X\n", status1);
+//    D_PRINTF("[CAN1] RX Get Error! - %X\n", status1);
     return;
   }
 
   // Check IDE
   if(RxHeader.IDE != CAN_ID_EXT)
   {
-    D_PRINTF("[CAN1] IDE Error!\n");
+//    D_PRINTF("[CAN1] IDE Error!\n");
     return;
   }
 
   // Check DLC
   if(RxHeader.DLC != 8)
   {
-    D_PRINTF("[CAN1] DLC Error!\n");
+//    D_PRINTF("[CAN1] DLC Error!\n");
     return;
   }
 
 
-#if (1 != TEST_CAN)
-  printf("%X %X %X %X %X %X %X %X %X %X\n",
-    RxHeader.ExtId, RxHeader.DLC, RxData[0], RxData[1], RxData[2], RxData[3], RxData[4], RxData[5], RxData[6], RxData[7]);
-#endif /* TEST_CAN */
+  return RxData;
+
+
+//#if (1 != TEST_CAN)
+//  printf("%X %X %X %X %X %X %X %X %X %X\n",
+//    RxHeader.ExtId, RxHeader.DLC, RxData[0], RxData[1], RxData[2], RxData[3], RxData[4], RxData[5], RxData[6], RxData[7]);
+//#endif /* TEST_CAN */
 }
 
 
 void CAN1_Tx_Test(void)
 {
-  TxHeader.ExtId = 0xCEC0AC;
+  TxHeader.ExtId = 0x00;
   TxHeader.IDE = CAN_ID_EXT;
   TxHeader.RTR = CAN_RTR_DATA;
   TxHeader.DLC = 8;
